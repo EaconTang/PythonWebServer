@@ -1,3 +1,39 @@
+# encoding=utf-8
+"""
+下面的代码片段展示了（WSGI）接口的服务器和框架端
+def run_application(application):
+    '''Server code.'''
+    # This is where an application/framework stores
+    # an HTTP status and HTTP response headers for the server
+    # to transmit to the client
+    headers_set = []
+    # Environment dictionary with WSGI/CGI variables
+    environ = {}
+
+    def start_response(status, response_headers, exc_info=None):
+        headers_set[:] = [status, response_headers]
+
+    # Server invokes the ‘application' callable and gets back the
+    # response body
+    result = application(environ, start_response)
+    # Server builds an HTTP response and transmits it to the client
+    …
+
+def app(environ, start_response):
+    '''A barebones WSGI app.'''
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    return ['Hello world!']
+
+run_application(app)
+
+
+以下是它如何工作的：
+
+1.框架提供一个可调用的’应用’（WSGI规格并没有要求如何实现）
+2.服务器每次接收到HTTP客户端请求后，执行可调用的’应用’。服务器把一个包含了WSGI/CGI变量的字典和一个可调用的’start_response’做为参数给可调用的’application’。
+3.框架/应用生成HTTP状态和HTTP响应头，然后把它们传给可调用的’start_response’，让服务器保存它们。框架/应用也返回一个响应体。
+4.服务器把状态，响应头，响应体合并到HTTP响应里，然后传给（HTTP）客户端（这步不是（WSGI）规格里的一部分，但它是后面流程中的一步，为了解释清楚我加上了这步）
+"""
 import socket
 import StringIO
 import sys
@@ -124,37 +160,3 @@ if __name__ == '__main__':
     httpd = make_server(SERVER_ADDRESS, application)
     print 'WSGIServer: Sering HTTP on port {0}...\n'.format(PORT)
     httpd.serve_forever()
-
-# 下面的代码片段展示了（WSGI）接口的服务器和框架端
-# def run_application(application):
-#     """Server code."""
-#     # This is where an application/framework stores
-#     # an HTTP status and HTTP response headers for the server
-#     # to transmit to the client
-#     headers_set = []
-#     # Environment dictionary with WSGI/CGI variables
-#     environ = {}
-#
-#     def start_response(status, response_headers, exc_info=None):
-#         headers_set[:] = [status, response_headers]
-#
-#     # Server invokes the ‘application' callable and gets back the
-#     # response body
-#     result = application(environ, start_response)
-#     # Server builds an HTTP response and transmits it to the client
-#     …
-#
-# def app(environ, start_response):
-#     """A barebones WSGI app."""
-#     start_response('200 OK', [('Content-Type', 'text/plain')])
-#     return ['Hello world!']
-#
-# run_application(app)
-
-#
-# 以下是它如何工作的：
-#
-# 1.框架提供一个可调用的’应用’（WSGI规格并没有要求如何实现）
-# 2.服务器每次接收到HTTP客户端请求后，执行可调用的’应用’。服务器把一个包含了WSGI/CGI变量的字典和一个可调用的’start_response’做为参数给可调用的’application’。
-# 3.框架/应用生成HTTP状态和HTTP响应头，然后把它们传给可调用的’start_response’，让服务器保存它们。框架/应用也返回一个响应体。
-# 4.服务器把状态，响应头，响应体合并到HTTP响应里，然后传给（HTTP）客户端（这步不是（WSGI）规格里的一部分，但它是后面流程中的一步，为了解释清楚我加上了这步）
