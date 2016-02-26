@@ -154,9 +154,12 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         sys.exit('Please provide a WSGI application object as module:callable')
     app_path = sys.argv[1]
+    print 'app_path : ' + str(app_path)
     module, application = app_path.split(':')
+    print 'import module :' + str(module)
     module = __import__(module)
     application = getattr(module, application)
+    print 'get application' + str(application) + 'from module...'
     httpd = make_server(SERVER_ADDRESS, application)
     print 'WSGIServer: Sering HTTP on port {0}...\n'.format(PORT)
     httpd.serve_forever()
