@@ -87,6 +87,8 @@ class WSGIServer(object):
         (self.request_method,
          self.path,
          self.request_version) = request_line.split()
+        # todo
+        # parse request body?
 
     def get_environ(self):
         env = {}
