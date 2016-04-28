@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<html xmlns:py="http://purl.org/kid/ns#>">
+
+<head>
+    <title>
+        A Robaccia Blog
+    </title>
+</head>
+
+<div py:for="row in rows.fetchall()">
+    <h2>
+        ${row.title}
+    </h2>
+    <div>
+        ${row.content}
+    </div>
+    <p>
+        <a href="./${row.id}/">${row.updated}</a>
+    </p>
+</div>

@@ -1,0 +1,2 @@
+import manage
+manage.run()
