@@ -5,6 +5,17 @@ class ServerException(Exception):
     """
 
 
+class WSGIServerException(ServerException):
+    """
+
+    """
+
+
+class SendResponseException(ServerException):
+    """
+
+    """
+
 class RequestPathException(ServerException):
     """
 
