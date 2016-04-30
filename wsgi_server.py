@@ -5,16 +5,18 @@ import sys
 import datetime
 import select
 import Queue
+import time
+import gevent
 
 from parser import RequestParser
 from server_exception import *
 
 
 class WSGIServer(object):
-    def __init__(self, server_address, set_nonblock=False, request_queue_size=1, buffer_size=4096):
+    def __init__(self, server_address, set_nonblock=None, request_queue_size=1, buffer_size=4096):
         assert isinstance(server_address, tuple)
         self.server_address = server_address
-        self._use_nonblock = set_nonblock
+        self._nonblock_way = set_nonblock
         self.request_queue_size = request_queue_size
 
         self.sock = self.build_sock()
@@ -25,7 +27,7 @@ class WSGIServer(object):
     def build_sock(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if self._use_nonblock:
+        if self._nonblock_way:
             sock.setblocking(0)
         sock.bind(self.server_address)
         sock.listen(self.request_queue_size)
@@ -39,12 +41,14 @@ class WSGIServer(object):
         self.app = app
 
     def serve_forever(self):
-        if self._use_nonblock:
-            self.serve_nonblock()
+        if self._nonblock_way.lower() == 'poll':
+            self.poll_server()
+        if self._nonblock_way.lower() == 'gevent':
+            self.gevent_server()
         else:
-            self.serve_block()
+            self.block_server()
 
-    def serve_nonblock(self):
+    def poll_server(self):
         """
         use select.poll
         :return:
@@ -55,9 +59,9 @@ class WSGIServer(object):
         EVENT_READ_WRITE = (EVENT_READ_ONLY | select.POLLOUT)
         poller.register(self.sock.fileno(), EVENT_READ_ONLY)
 
-        fd_to_sock = {self.sock.fileno(): self.sock}
+        # fd_to_sock = {self.sock.fileno(): self.sock}
         fd_to_conn = {}         # fileno: client_connetion
-        fd_to_request = {}      # client_connection: request_queue
+        # fd_to_request = {}      # client_connection: request_queue
         fd_to_response = {}    # client_connection: response
         while True:
             events = poller.poll(1)
@@ -71,6 +75,7 @@ class WSGIServer(object):
                     conn.setblocking(0)
                     poller.register(conn.fileno(), EVENT_READ_ONLY)     # next time we'll check this connection
                     fd_to_conn[conn.fileno()] = conn
+                    fd_to_response[conn.fileno()] = Queue.Queue()
                 elif event & select.POLLIN:                             # con could receive data
                     request_data = fd_to_conn[fd].recv(self.buffer)
                     if request_data:
@@ -78,32 +83,50 @@ class WSGIServer(object):
                         environ = self.build_environ(request_data)
                         status, headers, body = self.run_app(environ)
                         response = self.build_response(status, headers, body)
-                        fd_to_response[fd] = response
-                        poller.modify(fd, EVENT_WRITE_ONLY)             # now conn could be read or wrote
+                        fd_to_response[fd].put(response)
+                        poller.modify(fd, EVENT_READ_WRITE)             # now conn could be read or wrote
                 elif event & select.POLLOUT:                            # conn could send data
-                    res = fd_to_response[fd]
+                    res = fd_to_response[fd].get_nowait()
                     print '#'*40, '\n[fd:{}]sending:\n{}'.format(fd, res)
                     self.send_response(fd_to_conn[fd], res)
-                    # poller.unregister(fd)
+                    if fd_to_response[fd].empty():
+                        self.close(fd_to_conn[fd])
+                        poller.unregister(fd)
+                        del fd_to_response[fd]
                 elif event & select.POLLHUP:
                     print '#'*40, "\nclosing HUP client: ", fd_to_conn[fd].getpeername()
+                    self.close(fd_to_conn[fd])
                     poller.unregister(fd)
-                    fd_to_conn[fd].shutdown(socket.SHUT_RDWR)
-                    if fd_to_response.empty():
-                        del fd_to_response
+                    del fd_to_response[fd]
                 elif event & select.POLLNVAL:
                     raise POLLEXCEPTION("Descriptor closed before unregisterd!")
                 elif event & select.POLLERR:
                     self.sock.close()
                     raise POLLEXCEPTION("Error on select.poll")
 
-    def serve_block(self):
+    def gevent_server(self):
+        while True:
+            gevent.joinall([gevent.spawn(self._gevent_server) for i in range(self.request_queue_size)])
+
+    def _gevent_server(self):
+        cli, addr = self.sock.accept()
+        cli.setblocking(0)
+        data = cli.recv(self.buffer)
+        environ = self.build_response(data)
+        status, headers, body = self.run_app(environ)
+        res = self.build_response(status, headers, body)
+        self.send_n_close(cli, res)
+
+    def block_server(self):
         while True:
             client_connection, client_address = self.sock.accept()          # block-point
+            print "Got connection from: ", client_address
             request_data = self.receive_from(client_connection)             # block-point
+            print "Received: ", request_data
             environ = self.build_environ(request_data)
             status, headers, body = self.run_app(environ)
             response = self.build_response(status, headers, body)
+            print "Sending: ", response
             self.send_n_close(client_connection, response)                 # block-point
 
     def receive_from(self, client):
@@ -183,25 +206,46 @@ class WSGIServer(object):
         return '\n'.join(response_lines)
 
     @staticmethod
-    def send_n_close(client, res):
-        try:
-            client.sendall(res)
-        except Exception as e:
-            raise SendResponseException(e)
-        finally:
-            client.close()
-
-    @staticmethod
     def send_response(client, res):
         try:
             client.sendall(res)
         except Exception as e:
-            raise SendResponseException(e)
+            raise
+
+    @staticmethod
+    def shutdown(client):
+        client.shutdown()
+
+    @staticmethod
+    def close(client):
+        try:
+            client.close()
+        except Exception as e:
+            raise
+
+    @staticmethod
+    def send_n_close(client, res):
+        WSGIServer.send_response(client, res)
+        WSGIServer.close(client)
 
 
 if __name__ == '__main__':
     from test import WSGIapp
+    # print {
+    #     'in': select.POLLIN,
+    #     'out': select.POLLOUT,
+    #     'hup': select.POLLHUP,
+    #     'pri': select.POLLPRI,
+    #     'err': select.POLLERR,
+    #     'nval': select.POLLNVAL,
+    #     'rdband': select.POLLRDBAND,
+    #     'rdnorm': select.POLLRDNORM,
+    #     'wrband': select.POLLWRBAND,
+    #     'wrnorm': select.POLLWRNORM,
+    # }
+    # {'wrnorm': 4, 'hup': 16, 'err': 8, 'in': 1, 'wrband': 256, 'rdband': 128, 'nval': 32, 'pri': 2, 'rdnorm': 64, 'out': 4}
 
-    svr = WSGIServer(('localhost', 8000), set_nonblock=True)
+
+    svr = WSGIServer(('localhost', 8000), set_nonblock='gevent', request_queue_size=128)
     svr.set_application(WSGIapp.app)
     svr.serve_forever()
