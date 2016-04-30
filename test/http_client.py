@@ -25,7 +25,7 @@ ct = lambda : time.time()
 def foo():
     # print _range
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("localhost", 8000))
+    s.connect(("localhost", 8008))
     s.send(req)
     data = s.recv(4096)
     s.close()
@@ -79,4 +79,4 @@ def main(x):
     print res2
 
 if __name__ == '__main__':
-    main(100)
+    main(5000)

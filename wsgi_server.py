@@ -13,7 +13,7 @@ from server_exception import *
 
 
 class WSGIServer(object):
-    def __init__(self, server_address, set_nonblock=None, request_queue_size=1, buffer_size=4096):
+    def __init__(self, server_address, set_nonblock='', request_queue_size=1, buffer_size=4096):
         assert isinstance(server_address, tuple)
         self.server_address = server_address
         self._nonblock_way = set_nonblock
@@ -35,6 +35,9 @@ class WSGIServer(object):
 
     def set_buffer(self, buffer_size):
         self.buffer = buffer_size
+
+    def set_nonblock_way(self, nonblock_way):
+        self._nonblock_way = nonblock_way
 
     def set_application(self, app):
         """callable app served"""
@@ -106,13 +109,14 @@ class WSGIServer(object):
 
     def gevent_server(self):
         while True:
+            # for i in range(self.request_queue_size):
+            #     self._gevent_server()
             gevent.joinall([gevent.spawn(self._gevent_server) for i in range(self.request_queue_size)])
 
     def _gevent_server(self):
         cli, addr = self.sock.accept()
-        cli.setblocking(0)
         data = cli.recv(self.buffer)
-        environ = self.build_response(data)
+        environ = self.build_environ(data)
         status, headers, body = self.run_app(environ)
         res = self.build_response(status, headers, body)
         self.send_n_close(cli, res)
@@ -246,6 +250,7 @@ if __name__ == '__main__':
     # {'wrnorm': 4, 'hup': 16, 'err': 8, 'in': 1, 'wrband': 256, 'rdband': 128, 'nval': 32, 'pri': 2, 'rdnorm': 64, 'out': 4}
 
 
-    svr = WSGIServer(('localhost', 8000), set_nonblock='gevent', request_queue_size=128)
+    svr = WSGIServer(('localhost', 8008),  request_queue_size=2048)
+    svr.set_nonblock_way('gevent')
     svr.set_application(WSGIapp.app)
     svr.serve_forever()
