@@ -16,6 +16,11 @@ class SendResponseException(ServerException):
 
     """
 
+class POLLEXCEPTION(ServerException):
+    """
+
+    """
+
 class RequestPathException(ServerException):
     """
 

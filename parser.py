@@ -4,7 +4,7 @@ class RequestParser(object):
 
     """
     def __init__(self, request):
-        self._request = request.lstrip().rstrip()
+        self._request = request.lstrip()
         self._all_request_lines = self._request.splitlines()
         self._index_space = self.get_index_space()
 
