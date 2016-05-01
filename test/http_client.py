@@ -22,14 +22,17 @@ salutons
 
 ct = lambda : time.time()
 
-def foo():
+def foo(n):
     # print _range
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect(("localhost", 8008))
     s.send(req)
+    return s
+
+def bar(n, s):
     data = s.recv(4096)
     s.close()
-    print "[pid:{}]done".format(os.getpid())
+    print "[process:{}]done".format(n)
 
     #
     # conn_list = []
@@ -60,23 +63,29 @@ def foo():
 
 def main(x):
 
-
-    t1 = ct()
-
-    gevent.joinall([gevent.spawn(foo, ) for i in range(x)])
-    print 'Done'
-
-    res1 = ct() - t1
-
+    #
+    # t1 = ct()
+    #
+    # gevent.joinall([gevent.spawn(foo, i) for i in range(x)])
+    # print 'Done'
+    #
+    # res1 = ct() - t1
+    #
     t2 = ct()
+    socks = []
     for i in range(x):
-        foo()
+        s= foo(i)
+        socks.append(s)
+
+    for i in range(x):
+        bar(i, socks[i])
+
     print 'Done'
 
     res2 = ct() - t2
 
-    print res1
+    # print res1
     print res2
 
 if __name__ == '__main__':
-    main(5000)
+    main(20)

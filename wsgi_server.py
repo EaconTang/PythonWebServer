@@ -70,7 +70,6 @@ class WSGIServer(object):
             events = poller.poll(1)
             if not events:
                 continue
-            print events
             for fd, event in events:
                 if fd == self.sock.fileno():                            # socket get a new client connection
                     conn, addr = self.sock.accept()
@@ -97,7 +96,7 @@ class WSGIServer(object):
                         poller.unregister(fd)
                         del fd_to_response[fd]
                 elif event & select.POLLHUP:
-                    print '#'*40, "\nclosing HUP client: ", fd_to_conn[fd].getpeername()
+                    # print '#'*40, "\nclosing HUP client: ", fd_to_conn[fd].getpeername()
                     self.close(fd_to_conn[fd])
                     poller.unregister(fd)
                     del fd_to_response[fd]
@@ -111,27 +110,30 @@ class WSGIServer(object):
         while True:
             # for i in range(self.request_queue_size):
             #     self._gevent_server()
-            gevent.joinall([gevent.spawn(self._gevent_server) for i in range(self.request_queue_size)])
+            gevent.joinall([gevent.spawn(self._gevent_server, i) for i in range(self.request_queue_size)])
 
-    def _gevent_server(self):
+    def _gevent_server(self, n):
+        start_time = time.time()
         cli, addr = self.sock.accept()
         data = cli.recv(self.buffer)
         environ = self.build_environ(data)
         status, headers, body = self.run_app(environ)
         res = self.build_response(status, headers, body)
         self.send_n_close(cli, res)
+        print "[ID:{}]Time cost: {}".format(n, time.time() - start_time)
 
     def block_server(self):
         while True:
             client_connection, client_address = self.sock.accept()          # block-point
-            print "Got connection from: ", client_address
+            # print "Got connection from: ", client_address
             request_data = self.receive_from(client_connection)             # block-point
-            print "Received: ", request_data
+            # print "Received: ", request_data
             environ = self.build_environ(request_data)
             status, headers, body = self.run_app(environ)
             response = self.build_response(status, headers, body)
-            print "Sending: ", response
+            # print "Sending: ", response
             self.send_n_close(client_connection, response)                 # block-point
+
 
     def receive_from(self, client):
         request_data = b""
@@ -251,6 +253,6 @@ if __name__ == '__main__':
 
 
     svr = WSGIServer(('localhost', 8008),  request_queue_size=2048)
-    svr.set_nonblock_way('gevent')
+    svr.set_nonblock_way('poll')
     svr.set_application(WSGIapp.app)
     svr.serve_forever()
